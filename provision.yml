@@ -1,0 +1,138 @@
+---
+- hosts: abevjava
+  name: Installing Ubuntu Desktop Environment
+  become: True
+  tasks:
+  - name: Updating Local Package List
+    apt:
+      update_cache: yes
+
+  #- name: Installing Ubuntu Desktop
+  #  apt:
+  #    name: ubuntu-desktop
+  #    state: latest
+
+  - name: Installing lUbuntu Desktop
+    apt:
+      name: lubuntu-desktop
+      state: latest
+
+  - name: User Autologin Create Config
+    lineinfile:
+      dest: /etc/lightdm/lightdm.conf
+      create: yes
+      owner: root
+      group: root
+      mode: 0644
+      regexp: '^\[SeatDefaults\]'
+      line: '[SeatDefaults]'
+
+  - name: User Autologin for vagrant User
+    lineinfile:
+      dest: /etc/lightdm/lightdm.conf
+      regexp: ^autologin-user=
+      line: autologin-user=vagrant
+      insertafter: '^\[SeatDefaults\]p'
+
+  - name: StartX
+    service:
+      name: lightdm
+      state: restarted
+
+- hosts: all
+  name: Installing Oracle Java 8
+  become: True
+  tasks:
+    - name: Install add-apt-repostory
+      sudo: yes
+      apt:
+        name: software-properties-common
+        state: latest
+
+    - name: Add Oracle JDK PPA
+      apt_repository:
+        repo: 'ppa:webupd8team/java'
+
+    - name: Accept Oracle Licence Agreement
+      debconf:
+        name: oracle-java8-installer
+        question: 'shared/accepted-oracle-license-v1-1'
+        value: 'true'
+        vtype: 'select'
+
+    - name: Install Oracle Java 8
+      apt:
+        name: "{{item}}"
+        state: latest
+      with_items:
+        - oracle-java8-installer
+        - ca-certificates
+        - oracle-java8-set-default
+
+- hosts: abevjava
+  name: Installing ROBOT Framework with Jython
+  become: True
+  vars:
+    jython_ver : '2.7.0'
+    jython_name : 'jython-{{ jython_ver }}'
+    jython_installer_jar : 'jython-installer-{{ jython_ver }}.jar'
+    jython_installer_url : 'http://search.maven.org/remotecontent?filepath=org/python/jython-installer/{{ jython_ver }}/{{ jython_installer_jar }}'
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/opt/jython/bin"
+    JYTHON_HOME: "/opt/jython"
+  tasks:
+    - name: checking for jython install...
+      stat:
+        path: '/opt/{{ jython_name }}'
+      register: jython_stat
+
+    - name: downloading jython installer...
+      when: jython_stat.stat.isdir is not defined
+      get_url:
+        url: '{{ jython_installer_url }}'
+        dest: '/tmp/{{ jython_installer_jar }}'
+
+    - name: installing jython...
+      when: jython_stat.stat.isdir is not defined
+      shell: java -jar '/tmp/{{ jython_installer_jar }}' -s -d '/opt/{{ jython_name }}'
+
+    - name: linking /opt/jython...
+      file:
+        src: '/opt/{{ jython_name }}'
+        dest: '/opt/jython'
+        state: link
+
+    - name: seed jython...
+      when: jython_stat.stat.isdir is not defined
+      shell: /opt/jython/bin/jython -c 'exit()'
+
+    - name: include jython in the default path and set JYTHON_HOME, JYTHON_OPTS...
+      copy:
+        src: 'etc/profile.d/jython.sh'
+        dest: '/etc/profile.d/jython.sh'
+        mode: 644
+
+    # ToDo
+#    - name: Set Jython in PATH
+#          export PATH=$PATH:'/opt/jython/bin'
+#          echo 'export PATH=$PATH:"/opt/jython/bin"' >> /home/$USERNAME/.bashrc
+#          echo 'export JYTHON_HOME="/opt/jython"' >> /home/$USERNAME/.bashrc
+#          echo 'export PATH=$PATH:"/opt/jython/bin"' >> /root/.bashrc
+#          echo 'export JYTHON_HOME="/opt/jython"' >> /root/.bashrc
+
+    # ToDo
+    - name: Enable PIP for Jython
+      command: '/opt/{{ jython_name }}/bin/jython -m ensurepip'
+
+    # ToDo
+    - name: Install ROBOT frmework with Jython PIP
+      command: '/opt/{{ jython_name }}/bin/jython -m pip -q install robotframework'
+
+- hosts: abevjava
+  name: Installing Á.NY.K./Abev.java
+  tasks:
+    - name: Downloading Abev Java Installer Jar
+      get_url:
+        url: http://nav.gov.hu/data/cms36637/abevjava_install.jar
+        dest: /home/vagrant/abevjava_install.jar
+
